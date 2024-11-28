@@ -1,2 +1,5 @@
-target
+/target
+/erc20
+
 .env
+notes.md
