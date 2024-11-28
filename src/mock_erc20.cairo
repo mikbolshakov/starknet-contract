@@ -24,11 +24,16 @@ pub mod MockERC20 {
     }
 
     #[constructor]
-    fn constructor(ref self: ContractState, initial_supply: u256, recipient: ContractAddress) {
-        let name = "MockToken";
-        let symbol = "MTK";
+    fn constructor(ref self: ContractState) {
+        let name = "TestArApp";
+        let symbol = "TAA";
 
         self.erc20.initializer(name, symbol);
-        self.erc20.mint(recipient, initial_supply);
+    }
+
+    #[external(v0)]
+    fn mint_to_self(ref self: ContractState, amount: u256) {
+        let caller: ContractAddress = starknet::get_caller_address();
+        self.erc20.mint(caller, amount);
     }
 }
