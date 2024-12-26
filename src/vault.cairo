@@ -4,14 +4,19 @@ use starknet::ContractAddress;
 pub trait IERC20<TContractState> {
     fn balance_of(self: @TContractState, account: ContractAddress) -> felt252;
     fn transfer(ref self: TContractState, recipient: ContractAddress, amount: felt252);
-    fn transfer_from(ref self: TContractState, sender: ContractAddress, recipient: ContractAddress, amount: felt252);
+    fn transfer_from(
+        ref self: TContractState, 
+        sender: ContractAddress, 
+        recipient: ContractAddress, 
+        amount: felt252,
+    );
 }
 
 #[starknet::interface]
 pub trait ISimpleVault<TContractState> {
-    fn get_contract_balance(self: @TContractState) -> u256;
     fn deposit(ref self: TContractState, amount: u256);
     fn withdraw(ref self: TContractState);
+    fn get_contract_balance(self: @TContractState) -> u256;
 }
 
 #[starknet::contract]
@@ -26,23 +31,23 @@ pub mod SimpleVault {
         total_balance: u256,
     }
 
-    #[event]
-    #[derive(Copy, Drop, Debug, PartialEq, starknet::Event)]
-    pub enum Event {
-        Deposited: Deposited,
-        Withdrawn: Withdrawn
-    }
+    // #[event]
+    // #[derive(Copy, Drop, Debug, PartialEq, starknet::Event)]
+    // pub enum Event {
+    //     Deposited: Deposited,
+    //     Withdrawn: Withdrawn
+    // }
 
-    #[derive(Copy, Drop, Debug, PartialEq, starknet::Event)]
-    pub struct Deposited {
-        pub user: ContractAddress,
-        pub amount: u256
-    }
+    // #[derive(Copy, Drop, Debug, PartialEq, starknet::Event)]
+    // pub struct Deposited {
+    //     pub user: ContractAddress,
+    //     pub amount: u256
+    // }
 
-    #[derive(Copy, Drop, Debug, PartialEq, starknet::Event)]
-    pub struct Withdrawn {
-        pub amount: u256
-    }
+    // #[derive(Copy, Drop, Debug, PartialEq, starknet::Event)]
+    // pub struct Withdrawn {
+    //     pub amount: u256
+    // }
 
     #[constructor]
     fn constructor(ref self: ContractState, token: ContractAddress) {
@@ -52,7 +57,6 @@ pub mod SimpleVault {
 
     #[abi(embed_v0)]
     impl SimpleVault of super::ISimpleVault<ContractState> {
-
         fn get_contract_balance(self: @ContractState) -> u256 {
             self.total_balance.read()
         }
@@ -68,7 +72,7 @@ pub mod SimpleVault {
             let amount_felt252: felt252 = amount.low.into();
             self.token.read().transfer_from(caller, this, amount_felt252);
 
-            self.emit(Deposited { user: caller, amount });
+            // self.emit(Deposited { user: caller, amount });
         }
 
         fn withdraw(ref self: ContractState) {
@@ -84,7 +88,7 @@ pub mod SimpleVault {
 
             self.total_balance.write(0);
 
-            self.emit(Withdrawn { amount: current_balance });
+            // self.emit(Withdrawn { amount: current_balance });
         }
     }
 }
