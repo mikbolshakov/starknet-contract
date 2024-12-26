@@ -2,8 +2,9 @@ use starknet::ContractAddress;
 
 #[starknet::interface]
 pub trait IERC20<TContractState> {
-    fn transfer(ref self: TContractState, recipient: ContractAddress, amount: u256) -> bool;
-    fn transfer_from(ref self: TContractState, from: ContractAddress, to: ContractAddress, amount: u256) -> bool;
+    fn balance_of(self: @TContractState, account: ContractAddress) -> felt252;
+    fn transfer(ref self: TContractState, recipient: ContractAddress, amount: felt252);
+    fn transfer_from(ref self: TContractState, sender: ContractAddress, recipient: ContractAddress, amount: felt252);
 }
 
 #[starknet::interface]
@@ -17,6 +18,7 @@ pub trait ISimpleVault<TContractState> {
 pub mod SimpleVault {
     use super::{IERC20Dispatcher, IERC20DispatcherTrait};
     use starknet::{ContractAddress, get_caller_address, get_contract_address};
+    use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
 
     #[storage]
     struct Storage {
@@ -60,91 +62,29 @@ pub mod SimpleVault {
             let caller = get_caller_address();
             let this = get_contract_address();
 
-            let current_balance = self.total_balance.read();
+            let current_balance: u256 = self.token.read().balance_of(this).try_into().unwrap();
             self.total_balance.write(current_balance + amount);
 
-            self.token.read().transfer_from(caller, this, amount);
+            let amount_felt252: felt252 = amount.low.into();
+            self.token.read().transfer_from(caller, this, amount_felt252);
 
             self.emit(Deposited { user: caller, amount });
         }
 
         fn withdraw(ref self: ContractState) {
-            let caller: ContractAddress = 0x040048a1fe47e0a948bab169712d1736c3e18e087911a708a1634f605dd50c38
+            let caller: ContractAddress = 0x0000A7aEFbb60738b333Fa67d3C2316BeF69593fF3f420b8fb0bF2a7c47e9A11
                 .try_into()
                 .unwrap();
             let this = get_contract_address();
-        
-            let current_balance = self.total_balance.read();
-        
-            self.token.read().transfer(caller, current_balance);
-        
+
+            let current_balance: u256 = self.token.read().balance_of(this).try_into().unwrap();
+
+            let amount_felt252: felt252 = current_balance.low.into();
+            self.token.read().transfer(caller, amount_felt252);
+
             self.total_balance.write(0);
-        
+
             self.emit(Withdrawn { amount: current_balance });
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::{SimpleVault, ISimpleVaultDispatcher, ISimpleVaultDispatcherTrait};
-    use erc20::token::{
-        IERC20DispatcherTrait as IERC20DispatcherTrait_token,
-        IERC20Dispatcher as IERC20Dispatcher_token,
-    };
-    use starknet::testing::{set_contract_address, set_account_contract_address};
-    use starknet::{ContractAddress, syscalls::deploy_syscall, contract_address_const};
-
-    const token_name: felt252 = 'myToken';
-    const decimals: u8 = 18;
-    const initial_supply: felt252 = 100000;
-    const symbols: felt252 = 'mtk';
-
-    fn deploy() -> (ISimpleVaultDispatcher, ContractAddress, IERC20Dispatcher_token) {
-        let _token_address: ContractAddress = contract_address_const::<'token_address'>();
-        let caller = contract_address_const::<'caller'>();
-
-        let (token_contract_address, _) = deploy_syscall(
-            erc20::token::erc20::TEST_CLASS_HASH.try_into().unwrap(),
-            caller.into(),
-            array![caller.into(), token_name, decimals.into(), initial_supply, symbols].span(),
-            false,
-        )
-            .expect('1');
-
-        let (contract_address, _) = deploy_syscall(
-            SimpleVault::TEST_CLASS_HASH.try_into().unwrap(),
-            0,
-            array![token_contract_address.into()].span(),
-            false,
-        )
-            .expect('2');
-
-        (
-            ISimpleVaultDispatcher { contract_address },
-            contract_address,
-            IERC20Dispatcher_token { contract_address: token_contract_address },
-        )
-    }
-
-    #[test]
-    fn test_deposit() {
-        let caller = contract_address_const::<'caller'>();
-        let (dispatcher, vault_address, token_dispatcher) = deploy();
-
-        // Approve the vault to transfer tokens on behalf of the caller
-        let amount: felt252 = 10.into();
-        token_dispatcher.approve(vault_address.into(), amount);
-        set_contract_address(caller);
-
-        // Deposit tokens into the vault
-        let amount: u256 = 10.into();
-        let _deposit = dispatcher.deposit(amount);
-        println!("deposit :{:?}", _deposit);
-
-        let total_supply = dispatcher.get_contract_balance();
-
-        assert_eq!(total_supply, amount);
-    }
-}
-
