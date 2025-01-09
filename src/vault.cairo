@@ -1,7 +1,9 @@
 #[starknet::interface]
 pub trait IVault<TContractState> {
-    fn deposit(ref self: TContractState, amount: u256);
+    fn deposit(ref self: TContractState);
     fn withdraw(ref self: TContractState);
+    fn set_deposit_amount(ref self: TContractState, amount: u256);
+    fn get_deposit_amount(self: @TContractState) -> u256;
     fn get_contract_balance(self: @TContractState) -> u256;
 }
 
@@ -15,14 +17,20 @@ pub mod Vault {
     struct Storage {
         token: IERC20Dispatcher,
         admin: ContractAddress,
-        total_balance: u256,
+        deposit_amount: u256,
     }
 
     #[event]
     #[derive(Copy, Drop, Debug, PartialEq, starknet::Event)]
     pub enum Event {
+        Changed: Changed,
         Deposited: Deposited,
         Withdrawn: Withdrawn
+    }
+
+    #[derive(Copy, Drop, Debug, PartialEq, starknet::Event)]
+    pub struct Changed {
+        pub new_amount: u256
     }
 
     #[derive(Copy, Drop, Debug, PartialEq, starknet::Event)]
@@ -41,24 +49,35 @@ pub mod Vault {
         ref self: ContractState,
         token: ContractAddress,
         admin: ContractAddress,
+        amount: u256,
     ) {
         self.token.write(IERC20Dispatcher { contract_address: token });
         self.admin.write(admin);
+        self.deposit_amount.write(amount);
     }
 
     #[abi(embed_v0)]
     impl Vault of super::IVault<ContractState> {
         fn get_contract_balance(self: @ContractState) -> u256 {
-            self.total_balance.read()
+            self.token.read().balance_of(get_contract_address())
         }
 
-        fn deposit(ref self: ContractState, amount: u256) {
-            assert(amount != 0, 'Amount cannot be 0');
+        fn get_deposit_amount(self: @ContractState) -> u256 {
+            self.deposit_amount.read()
+        }
 
+        fn set_deposit_amount(ref self: ContractState, amount: u256) {
+            assert(get_caller_address() == self.admin.read(), 'You are not an admin');
+
+            self.deposit_amount.write(amount);
+
+            self.emit(Changed { new_amount: amount });
+        }
+
+        fn deposit(ref self: ContractState) {
             let caller = get_caller_address();
             let this = get_contract_address();
-
-            self.total_balance.write(self.total_balance.read() + amount);
+            let amount = self.deposit_amount.read();
 
             self.token.read().transfer_from(caller, this, amount);
 
@@ -66,13 +85,13 @@ pub mod Vault {
         }
 
         fn withdraw(ref self: ContractState) {
-            let current_balance = self.total_balance.read();
-
             assert(get_caller_address() == self.admin.read(), 'You are not an admin');
+
+            let current_balance = self.token.read().balance_of(get_contract_address());
+
             assert(current_balance != 0, 'Contract balance is zero');
 
             self.token.read().transfer(self.admin.read(), current_balance);
-            self.total_balance.write(0);
 
             self.emit(Withdrawn { amount: current_balance });
         }
